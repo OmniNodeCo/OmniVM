@@ -55,8 +55,7 @@ jobs:
           |-------------|-----------------------------------|
           | Linux x64   | omnivm-$TAG-linux-x64.tar.gz      |
           | Linux arm64 | omnivm-$TAG-linux-arm64.tar.gz    |
-          | macOS x64   | omnivm-$TAG-macos-x64.zip         |
-          | macOS arm64 | omnivm-$TAG-macos-arm64.zip       |
+          | macOS (Apple Silicon) | omnivm-$TAG-macos-arm64.zip |
           | Windows x64 | omnivm-$TAG-windows-x64.zip       |
 
           \`\`\`

@@ -85,7 +85,7 @@ VMs are stored in `~/.omnivm/vms/<id>/` (`vm.json` config, `disks/`,
 
 ### Building the executables yourself
 
-CI builds all five targets on every push to `main`
+CI builds every target (Linux x64/arm64, macOS Apple Silicon, Windows x64) on every push to `main`
 (`.github/workflows/build.yml`) and attaches archives to GitHub Releases on
 `v*` tags (`.github/workflows/release.yml`). Locally:
 
