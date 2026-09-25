@@ -1,0 +1,30 @@
+{
+  "name": "omnivm",
+  "version": "1.0.0",
+  "description": "OmniVM Workstation - run virtual machines from your terminal. No HTML, no Python. Pure Node.js + software x86 emulation.",
+  "type": "module",
+  "main": "bin/omnivm.js",
+  "bin": {
+    "omnivm": "bin/omnivm.js"
+  },
+  "scripts": {
+    "start": "node bin/omnivm.js",
+    "test": "node test/smoke.js",
+    "build:guest": "make -C guests/omnios"
+  },
+  "keywords": [
+    "vm",
+    "virtualization",
+    "emulator",
+    "x86",
+    "terminal",
+    "tui"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "v86": "0.5.462"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
