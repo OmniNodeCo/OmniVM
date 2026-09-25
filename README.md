@@ -101,6 +101,10 @@ support: esbuild bundles the app to one CJS file, the BIOS ROMs / OmniOS
 floppy / v86 WASM engine are embedded as SEA assets (`sea-config.json`), and
 the blob is injected into a copy of the node binary with postject.
 
+CI artifacts are a single zip of the unpacked bundle (no nested archives);
+the release archives (`tar.gz`/`zip`) are assembled once in `release.yml`,
+which also restores the executable bit the artifact store strips.
+
 ## The Workstation UI
 
 ```console

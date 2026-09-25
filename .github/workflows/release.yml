@@ -25,12 +25,38 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    env:
+      TAG: ${{ github.ref_name }}
     steps:
+      # each artifact is a plain zip of its bundle folder (omnivm binary +
+      # README + LICENSE), one directory per target — no nested archives
       - uses: actions/download-artifact@v4
         with:
-          pattern: "*-*"          # linux-x64, linux-arm64, macos-*, windows-x64
-          path: dist
-          merge-multiple: true
+          path: artifacts
+
+      - name: Package release archives (single zip/tar per target)
+        run: |
+          set -euo pipefail
+          mkdir -p dist pkg
+          pack() {  # pack <target> <extension>
+            local name="$1" ext="$2"
+            local dir="pkg/omnivm-${TAG}-${name}"
+            mkdir -p "$dir"
+            cp -a "artifacts/${name}/." "$dir/"
+            if [ "$name" != "windows-x64" ]; then
+              chmod 0755 "$dir/omnivm"   # artifact zips do not keep exec bits
+            fi
+            if [ "$ext" = "tar.gz" ]; then
+              tar -czf "dist/omnivm-${TAG}-${name}.tar.gz" -C pkg "omnivm-${TAG}-${name}"
+            else
+              tar -a -cf "dist/omnivm-${TAG}-${name}.zip" -C pkg "omnivm-${TAG}-${name}"
+            fi
+          }
+          pack linux-x64 tar.gz
+          pack linux-arm64 tar.gz
+          pack macos-arm64 zip
+          pack windows-x64 zip
+          ls -la dist/
 
       - name: Generate checksums
         run: |
@@ -41,7 +67,6 @@ jobs:
       - name: Create release and upload executables
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ github.ref_name }}
         run: |
           cat > notes.md <<EOF
           **OmniVM Workstation $TAG** — run virtual machines from your terminal.

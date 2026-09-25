@@ -54,7 +54,9 @@ if (isMac) sh(`codesign --sign - "${exe}"`);
 console.log(`[5/6] smoke run...`);
 sh(`"${exe}" version`);
 
-console.log(`[6/6] packaging...`);
+/* loose bundle folder (binary + docs) — CI uploads this and lets the
+ * artifact store do the one-and-only zip pass, so artifacts are never
+ * zip-inside-zip */
 const bundleName = `omnivm-${version}-${osName}-${arch}`;
 const bundleDir = path.join("dist", bundleName);
 fs.rmSync(bundleDir, { recursive: true, force: true });
@@ -62,13 +64,21 @@ fs.mkdirSync(bundleDir, { recursive: true });
 fs.copyFileSync(exe, path.join(bundleDir, isWin ? "omnivm.exe" : "omnivm"));
 for (const f of ["README.md", "LICENSE"]) fs.copyFileSync(f, path.join(bundleDir, f));
 
+fs.writeFileSync("dist/exe-path.txt", exe.replace(/\\/g, "/"));
+fs.writeFileSync("dist/bundle-dir.txt", bundleDir.replace(/\\/g, "/"));
+
+if (process.env.OMNIVM_SKIP_ARCHIVE) {
+  console.log(`\n✔ bundle: ${bundleDir}`);
+  console.log(`  (archive creation skipped — OMNIVM_SKIP_ARCHIVE is set)`);
+  process.exit(0);
+}
+
+console.log(`[6/6] packaging...`);
 const isTar = osName === "linux";
 const archive = path.join("dist", `${bundleName}.${isTar ? "tar.gz" : "zip"}`);
 fs.rmSync(archive, { force: true });
 if (isTar) sh(`tar -czf "${archive}" -C dist "${bundleName}"`);
 else sh(`tar -a -cf "${archive}" -C dist "${bundleName}"`);
-
-fs.writeFileSync("dist/exe-path.txt", exe.replace(/\\/g, "/"));
 fs.writeFileSync("dist/archive-path.txt", archive.replace(/\\/g, "/"));
 const size = fs.statSync(archive).size;
 console.log(`\n✔ ${archive} (${(size / 1048576).toFixed(1)} MB)`);

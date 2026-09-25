@@ -76,6 +76,11 @@ jobs:
       - run: npm ci
       - name: Build single-file executable (Node SEA)
         shell: bash
+        env:
+          # CI uploads the unpacked bundle folder; the artifact store makes
+          # the only zip. Release archives are built by release.yml, so we
+          # never ship zip-inside-zip.
+          OMNIVM_SKIP_ARCHIVE: "1"
         run: node scripts/build.mjs
       - name: Smoke test executable
         shell: bash
@@ -84,13 +89,13 @@ jobs:
           echo "smoke-testing: $EXE"
           "$EXE" version
           OMNIVM_HOME="$RUNNER_TEMP/omnivm-home" "$EXE" doctor
-      - name: Collect archive path
+      - name: Locate bundle folder
         shell: bash
-        run: echo "ARCHIVE=$(cat dist/archive-path.txt)" >> "$GITHUB_ENV"
-      - name: Upload artifact
+        run: echo "BUNDLE=$(cat dist/bundle-dir.txt)" >> "$GITHUB_ENV"
+      - name: Upload artifact (unpacked bundle — single zip)
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.name }}
-          path: ${{ env.ARCHIVE }}
+          path: ${{ env.BUNDLE }}
           if-no-files-found: error
           retention-days: 14
