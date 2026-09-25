@@ -1,0 +1,97 @@
+# Builds OmniVM single-file executables for Windows, macOS and Linux.
+#
+# Also callable as a reusable workflow (used by release.yml):
+#   jobs:
+#     build:
+#       uses: ./.github/workflows/build.yml
+#
+# Each platform job produces one archive artifact:
+#   omnivm-<version>-<os>-<arch>.(tar.gz|zip)
+# containing the standalone executable + README + LICENSE.
+#
+# Note: linux-arm64 uses GitHub's arm64 runners (available on public repos).
+# If your repo is private and the job never starts, remove that matrix entry.
+
+name: Build executables
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+jobs:
+  test:
+    name: Test (linux-x64)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: End-to-end VM lifecycle test
+        run: node test/smoke.js
+
+  build:
+    name: Build ${{ matrix.name }}
+    needs: test
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux-x64
+            runs-on: ubuntu-latest
+          - name: linux-arm64
+            runs-on: ubuntu-24.04-arm
+          - name: macos-x64
+            runs-on: macos-13
+          - name: macos-arm64
+            runs-on: macos-14
+          - name: windows-x64
+            runs-on: windows-latest
+    runs-on: ${{ matrix.runs-on }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Determine version
+        shell: bash
+        run: |
+          if [[ "${GITHUB_REF_NAME:-}" =~ ^v[0-9] ]]; then
+            echo "OMNIVM_VERSION=${GITHUB_REF_NAME}" >> "$GITHUB_ENV"
+          fi
+      - run: npm ci
+      - name: Build single-file executable (Node SEA)
+        shell: bash
+        run: node scripts/build.mjs
+      - name: Smoke test executable
+        shell: bash
+        run: |
+          EXE=$(cat dist/exe-path.txt)
+          echo "smoke-testing: $EXE"
+          "$EXE" version
+          OMNIVM_HOME="$RUNNER_TEMP/omnivm-home" "$EXE" doctor
+      - name: Collect archive path
+        shell: bash
+        run: echo "ARCHIVE=$(cat dist/archive-path.txt)" >> "$GITHUB_ENV"
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: ${{ env.ARCHIVE }}
+          if-no-files-found: error
+          retention-days: 14

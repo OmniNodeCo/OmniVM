@@ -1,0 +1,85 @@
+# Publishes a GitHub Release with the executables.
+#
+# Trigger: push a version tag, e.g.
+#   git tag v1.0.0 && git push origin v1.0.0
+#
+# The tag must start with "v". Archives built by build.yml are attached,
+# along with a checksums.txt (sha256).
+
+name: Release executables
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build all platforms
+    uses: ./.github/workflows/build.yml
+
+  release:
+    name: Publish GitHub release
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: "*-*"          # linux-x64, linux-arm64, macos-*, windows-x64
+          path: dist
+          merge-multiple: true
+
+      - name: Generate checksums
+        run: |
+          cd dist
+          sha256sum * > checksums.txt
+          cat checksums.txt
+
+      - name: Create release and upload executables
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          cat > notes.md <<EOF
+          **OmniVM Workstation $TAG** — run virtual machines from your terminal.
+
+          ## Install
+
+          Download the archive for your platform, extract it, and run the
+          **omnivm** binary inside:
+
+          | Platform    | Archive                           |
+          |-------------|-----------------------------------|
+          | Linux x64   | omnivm-$TAG-linux-x64.tar.gz      |
+          | Linux arm64 | omnivm-$TAG-linux-arm64.tar.gz    |
+          | macOS x64   | omnivm-$TAG-macos-x64.zip         |
+          | macOS arm64 | omnivm-$TAG-macos-arm64.zip       |
+          | Windows x64 | omnivm-$TAG-windows-x64.zip       |
+
+          \`\`\`
+          tar xzf omnivm-$TAG-linux-x64.tar.gz     # Linux
+          ./omnivm-$TAG-linux-x64/omnivm doctor
+          ./omnivm-$TAG-linux-x64/omnivm create myvm
+          ./omnivm-$TAG-linux-x64/omnivm
+          \`\`\`
+
+          ## Notes
+
+          - The executables are self-contained (Node runtime, x86 emulator,
+            BIOS ROMs and the bundled OmniOS guest are all embedded) — nothing
+            else to install. Verify with \`omnivm doctor\`.
+          - **macOS:** the binaries are ad-hoc signed and not notarized. If
+            Gatekeeper complains: \`xattr -d com.apple.quarantine ./omnivm\`
+          - **Windows:** SmartScreen may warn about the unsigned binary —
+            choose "More info" → "Run anyway".
+          - VMs are stored in \`~/.omnivm\` by default (\`OMNIVM_HOME\` to change).
+
+          Full docs in the README. SHA-256 checksums in checksums.txt.
+          EOF
+          gh release create "$TAG" dist/* \
+            --title "OmniVM Workstation $TAG" \
+            --notes-file notes.md \
+            --latest

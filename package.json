@@ -10,7 +10,8 @@
   "scripts": {
     "start": "node bin/omnivm.js",
     "test": "node test/smoke.js",
-    "build:guest": "make -C guests/omnios"
+    "build:guest": "make -C guests/omnios",
+    "build": "node scripts/build.mjs"
   },
   "keywords": [
     "vm",
@@ -26,5 +27,9 @@
   },
   "engines": {
     "node": ">=18"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2",
+    "postject": "^1.0.0-alpha.6"
   }
 }

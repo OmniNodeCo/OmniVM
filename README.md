@@ -48,6 +48,14 @@ $ ./bin/omnivm
 
 ## Quick start
 
+**Option A — standalone executable (no Node needed):** grab an archive from
+the [Releases](../../releases) page — `omnivm-<version>-<os>-<arch>` for
+Linux (tar.gz), macOS and Windows (zip) — extract and run the `omnivm`
+binary inside. Everything (runtime, x86 emulator, BIOS, OmniOS guest) is
+embedded in that one file.
+
+**Option B — from source:**
+
 ```console
 # 1. install (only dependency: the v86 engine)
 $ npm install
@@ -74,6 +82,24 @@ $ ./bin/omnivm
 
 VMs are stored in `~/.omnivm/vms/<id>/` (`vm.json` config, `disks/`,
 `snapshots/`, `run/`). Override with `OMNIVM_HOME`.
+
+### Building the executables yourself
+
+CI builds all five targets on every push to `main`
+(`.github/workflows/build.yml`) and attaches archives to GitHub Releases on
+`v*` tags (`.github/workflows/release.yml`). Locally:
+
+```console
+$ npm install
+$ node scripts/build.mjs        # builds for THIS platform
+# -> dist/omnivm-v<version>-<os>-<arch>.(tar.gz|zip)
+```
+
+Under the hood it uses Node's official
+[Single Executable Application](https://nodejs.org/api/single-executable-applications.html)
+support: esbuild bundles the app to one CJS file, the BIOS ROMs / OmniOS
+floppy / v86 WASM engine are embedded as SEA assets (`sea-config.json`), and
+the blob is injected into a copy of the node binary with postject.
 
 ## The Workstation UI
 
@@ -205,6 +231,7 @@ $ npm test        # end-to-end: boots a real VM, drives the console,
 bin/omnivm.js          entry point
 lib/cli.js             command-line interface
 lib/store.js           VM registry & disk/image paths
+lib/assets.js          asset resolution (repo files or SEA-embedded)
 lib/manager.js         lifecycle, control-socket client, attach/console
 lib/runner.js          per-VM runner process (v86 host + control server)
 lib/protocol.js        NDJSON framing
@@ -212,6 +239,9 @@ lib/tui/tui.js         terminal screen: cell buffer, diff rendering, keys
 lib/tui/app.js         the Workstation UI
 guests/omnios/         bundled guest OS (assembly source + Makefile + image)
 vendor/bios/           SeaBIOS + VGABIOS (vendored, see vendor/bios/README)
+scripts/build.mjs      single-file executable builder (Node SEA + postject)
+sea-config.json        SEA manifest: entry + embedded assets
+.github/workflows/     build.yml (all-platform executables) · release.yml
 test/smoke.js          end-to-end lifecycle test
 ```
 
