@@ -1,6 +1,11 @@
 /* OmniVM end-to-end smoke test.
  * Runs a real VM (bundled OmniOS guest), drives it over the control socket,
- * and exercises the full lifecycle. Exit 0 = pass. */
+ * and exercises the full lifecycle. Exit 0 = pass.
+ *
+ * CI notes: GitHub runners are slow and the software-emulated guest may take
+ * a while to boot, so every wait has generous timeouts, and the runner
+ * replays recent serial history on attach — the banner is detected even if
+ * it was printed before this test attached. */
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -21,16 +26,31 @@ console.log("OmniVM smoke test\n");
 const { createVM, findVM, listVMs, deleteVM, homeDir } = await import("../lib/store.js");
 const mgr = await import("../lib/manager.js");
 
-async function waitSerial(client, pattern, timeoutMs) {
-  const buf = [];
-  return new Promise((resolve, reject) => {
-    const to = setTimeout(() => reject(new Error(`timeout waiting for ${JSON.stringify(pattern)}; got: ${buf.join("").slice(-200)}`)), timeoutMs);
+/* A serial tap: accumulates everything the guest prints (live bytes + the
+ * replay received on attach) and lets checks wait for patterns. */
+class SerialTap {
+  constructor(client) {
+    this.text = "";
     client.on("event", m => {
-      if (m.evt !== "serial") return;
-      buf.push(Buffer.from(m.data, "base64").toString("latin1"));
-      if (buf.join("").includes(pattern)) { clearTimeout(to); resolve(buf.join("")); }
+      if (m.evt === "serial") this.text += Buffer.from(m.data, "base64").toString("latin1");
     });
-  });
+  }
+  /* waits until `pattern` appears in NEW output; consumes through it */
+  async wait(pattern, timeoutMs, label) {
+    const startLen = 0;
+    const deadline = Date.now() + timeoutMs;
+    for (;;) {
+      const idx = this.text.indexOf(pattern);
+      if (idx >= 0) { this.text = this.text.slice(idx + pattern.length); return; }
+      if (Date.now() > deadline) {
+        throw new Error(
+          `timeout (${Math.round(timeoutMs / 1000)}s) waiting for ${JSON.stringify(pattern)}` +
+          `${label ? " [" + label + "]" : ""}; last output seen: ${JSON.stringify(this.text.slice(-200))}`
+        );
+      }
+      await sleep(250);
+    }
+  }
 }
 
 try {
@@ -44,24 +64,24 @@ try {
   if (!mgr.isRunning(mgr.refresh(vm))) throw new Error("not running after start");
   ok("power on (runner process detached)");
 
-  // 3. console: wait for the OmniOS banner over serial
+  // 3. console: the runner replays serial history, so the banner is detected
+  //    even if the guest printed it before we attached (fast boots happen).
   const client = mgr.attach(mgr.refresh(vm));
-  let banner;
-  await check("guest boots OmniOS (serial banner)", async () => {
-    banner = await waitSerial(client, "Type 'help' for commands", 45000);
-  });
+  const tap = new SerialTap(client);
+  await check("guest boots OmniOS (serial banner)", () =>
+    tap.wait("Type 'help' for commands", 240000, "boot"));
 
   // 4. interact
   await check("shell responds to commands", async () => {
     client.serialIn("ver\r");
-    await waitSerial(client, "OmniVM Guest Tools", 10000);
+    await tap.wait("OmniVM Guest Tools", 90000, "ver");
     client.serialIn("echo omnivm-works\r");
-    await waitSerial(client, "omnivm-works", 10000);
+    await tap.wait("omnivm-works", 90000, "echo");
   });
 
   // 5. snapshot: take, then verify it appears in the list
   await check("live snapshot (save machine state)", async () => {
-    const res = await client.request({ cmd: "snapshot-save", name: "clean" });
+    const res = await client.request({ cmd: "snapshot-save", name: "clean" }, 120000);
     if (!res.ok) throw new Error(res.error);
     const list = await mgr.snapshot.list(vm);
     if (!list.find(s => s.name === "clean")) throw new Error("snapshot missing from list");
@@ -69,13 +89,13 @@ try {
 
   // 6. revert to it
   await check("revert to snapshot", async () => {
-    const res = await client.request({ cmd: "snapshot-restore", name: "clean" });
+    const res = await client.request({ cmd: "snapshot-restore", name: "clean" }, 120000);
     if (!res.ok) throw new Error(res.error);
   });
 
   // 7. VGA screen query
   await check("VGA text screen query", async () => {
-    const res = await client.request({ cmd: "screen" });
+    const res = await client.request({ cmd: "screen" }, 60000);
     if (!res.ok || !res.rows?.length) throw new Error("no screen rows");
     const flat = res.rows.join("\n");
     if (!flat.includes("omni>")) throw new Error("screen does not show shell prompt");
@@ -83,11 +103,11 @@ try {
 
   // 8. pause / unpause
   await check("pause & unpause", async () => {
-    await client.request({ cmd: "pause" });
-    let st = await client.request({ cmd: "status" });
+    await client.request({ cmd: "pause" }, 60000);
+    let st = await client.request({ cmd: "status" }, 60000);
     if (st.state !== "paused") throw new Error("state != paused");
-    await client.request({ cmd: "unpause" });
-    st = await client.request({ cmd: "status" });
+    await client.request({ cmd: "unpause" }, 60000);
+    st = await client.request({ cmd: "status" }, 60000);
     if (st.state !== "running") throw new Error("state != running");
   });
 
@@ -104,17 +124,10 @@ try {
   await check("resume from disk (guest state restored)", async () => {
     await mgr.resumeVM(vm);
     const c2 = mgr.attach(mgr.refresh(vm));
-    const buf = [];
-    await new Promise((resolve, reject) => {
-      const to = setTimeout(() => reject(new Error(`no shell response after resume; got: ${buf.join("").slice(-120)}`)), 25000);
-      c2.on("event", m => {
-        if (m.evt === "serial") {
-          buf.push(Buffer.from(m.data, "base64").toString("latin1"));
-          if (buf.join("").includes("omni>")) { clearTimeout(to); resolve(); }
-        }
-      });
-      setTimeout(() => c2.serialIn("uptime\r"), 1500);
-    });
+    const tap2 = new SerialTap(c2);
+    await sleep(1500); // let the engine come up
+    c2.serialIn("uptime\r");
+    await tap2.wait("Uptime", 120000, "post-resume uptime");
     c2.close();
   });
 

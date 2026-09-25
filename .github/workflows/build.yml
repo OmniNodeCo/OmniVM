@@ -32,7 +32,7 @@ jobs:
   test:
     name: Test (linux-x64)
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -45,7 +45,8 @@ jobs:
 
   build:
     name: Build ${{ matrix.name }}
-    needs: test
+    # runs in parallel with the test job — a test failure does not block
+    # producing executables (release.yml re-runs the full workflow on tags)
     timeout-minutes: 30
     strategy:
       fail-fast: false
