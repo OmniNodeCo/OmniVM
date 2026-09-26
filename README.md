@@ -7,9 +7,10 @@
      |_||_\___/|_|  |_|___/___|
 ```
 
-**Run virtual machines from your terminal.** OmniVM is a VMware
-Workstation–style VM manager that lives entirely in the console — no HTML, no
-Python, no GUI toolkit. Pure Node.js.
+**Run virtual machines from a real graphical interface.** OmniVM Workstation
+draws its entire GUI — library, toolbar, dialogs, live VM console — onto a
+canvas with its own widget engine: no HTML markup, no CSS, no DOM, no GUI
+toolkit downloads. Pure Node.js (plus a terminal UI and CLI, if you prefer).
 
 It ships with a complete virtualization stack:
 
@@ -18,7 +19,7 @@ It ships with a complete virtualization stack:
 | **Engine**   | [v86](https://github.com/copy/v86) — a full x86 PC emulator (WASM JIT): CPU, BIOS, VGA, PIC/PIT, UART, floppy/IDE/CD controllers |
 | **Manager**  | VM lifecycle processes ("runners") with a control socket — VMs keep running when you close the window, like VMware |
 | **OmniOS**   | A bundled guest operating system written in x86 assembly (boot sector + kernel with a working shell), built from source in this repo |
-| **UI**       | A hand-rolled, flicker-free terminal UI (TUI) + full CLI               |
+| **UI**       | A hand-drawn canvas GUI (zero HTML/DOM/CSS) + terminal TUI + full CLI  |
 
 ```console
 $ npm install
@@ -48,13 +49,28 @@ $ ./bin/omnivm
 
 ## Quick start
 
-**Option A — standalone executable (no Node needed):** grab an archive from
+**Option A — the graphical Workstation:**
+
+```console
+$ ./bin/omnivm            # or: omnivm web
+  OmniVM Workstation — graphical interface
+  running at  http://localhost:8080
+```
+
+Point your browser there: a dark VMware-style window with a VM library,
+power toolbar (power on/off, suspend, resume, reset, pause), summary cards,
+a live serial console you can type into, a phosphor-green VGA screen view,
+snapshot manager and a new-VM wizard — every pixel drawn by OmniVM's own
+canvas engine (`lib/web/static/app.js`), talking to the same VM runners as
+the CLI. Ships inside the executables too.
+
+**Option B — standalone executable (no Node needed):** grab an archive from
 the [Releases](../../releases) page — `omnivm-<version>-<os>-<arch>` for
 Linux (tar.gz), macOS and Windows (zip) — extract and run the `omnivm`
 binary inside. Everything (runtime, x86 emulator, BIOS, OmniOS guest) is
 embedded in that one file.
 
-**Option B — from source:**
+**Option C — from source (terminal):**
 
 ```console
 # 1. install (only dependency: the v86 engine)

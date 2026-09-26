@@ -143,6 +143,38 @@ try {
     if (!list.find(s => s.name === "clean")) throw new Error("snapshot lost");
   });
 
+  // 12b. graphical GUI server: static host + websocket VM list
+  await check("GUI server (canvas host, websocket API)", async () => {
+    const { startWebServer } = await import("../lib/web/server.js");
+    const http = await import("node:http");
+    const { WebSocket } = await import("ws");
+    const { server, port } = await startWebServer({ port: 0 });
+    try {
+      const page = await new Promise((resolve, reject) => {
+        http.get(`http://127.0.0.1:${port}/`, r => {
+          if (r.statusCode !== 200) return reject(new Error(`GET / -> ${r.statusCode}`));
+          let d = ""; r.on("data", c => d += c); r.on("end", () => resolve(d));
+        }).on("error", reject);
+      });
+      if (!page.includes("OmniVM Workstation")) throw new Error("GUI host page not served");
+      if (!page.includes("<canvas")) throw new Error("canvas host missing");
+      const ws = new WebSocket(`ws://127.0.0.1:${port}/ws`);
+      await new Promise((res, rej) => { ws.on("open", res); ws.on("error", rej); });
+      const listed = await new Promise((resolve, reject) => {
+        const to = setTimeout(() => reject(new Error("no vms broadcast")), 8000);
+        ws.on("message", raw => {
+          const m = JSON.parse(raw);
+          if (m.type === "vms") { clearTimeout(to); resolve(m.vms); }
+        });
+        ws.send(JSON.stringify({ type: "list" }));
+      });
+      if (!listed.length) throw new Error("vm list empty");
+      ws.close();
+    } finally {
+      await new Promise(r => server.close(r));
+    }
+  });
+
   // 13. cleanup
   deleteVM(vm.id);
   if (findVM("smoke-vm")) throw new Error("VM still exists after delete");

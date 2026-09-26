@@ -23,7 +23,8 @@
   ],
   "license": "MIT",
   "dependencies": {
-    "v86": "0.5.462"
+    "v86": "0.5.462",
+    "ws": "^8.22.0"
   },
   "engines": {
     "node": ">=18"

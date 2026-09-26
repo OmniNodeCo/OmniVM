@@ -4,3 +4,4 @@ dist/
 guests/omnios/boot.o
 guests/omnios/boot.elf
 guests/omnios/omnios.blob
+.demo-home/

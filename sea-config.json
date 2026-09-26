@@ -8,6 +8,8 @@
     "seabios.bin": "vendor/bios/seabios.bin",
     "vgabios.bin": "vendor/bios/vgabios.bin",
     "omnios.img": "guests/omnios/omnios.img",
-    "v86.wasm": "node_modules/v86/build/v86.wasm"
+    "v86.wasm": "node_modules/v86/build/v86.wasm",
+    "index.html": "lib/web/static/index.html",
+    "app.js": "lib/web/static/app.js"
   }
 }
