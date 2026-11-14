@@ -28,34 +28,31 @@ jobs:
     env:
       TAG: ${{ github.ref_name }}
     steps:
-      # each artifact is a plain zip of its bundle folder (omnivm binary +
-      # README + LICENSE), one directory per target — no nested archives
+      # artifacts arrive as single zips of files/folders (no nested archives):
+      #   cli-<target>/  → omnivm-<version>-<target>/ folder with the binary
+      #   desktop-<os>/  → installers (AppImage, .deb, .dmg, .exe, .zip)
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
 
-      - name: Package release archives (single zip/tar per target)
+      - name: Restore CLI executables (single archive per target)
         run: |
           set -euo pipefail
-          mkdir -p dist pkg
-          pack() {  # pack <target> <extension>
-            local name="$1" ext="$2"
-            local dir="pkg/omnivm-${TAG}-${name}"
-            mkdir -p "$dir"
-            cp -a "artifacts/${name}/." "$dir/"
-            if [ "$name" != "windows-x64" ]; then
-              chmod 0755 "$dir/omnivm"   # artifact zips do not keep exec bits
-            fi
-            if [ "$ext" = "tar.gz" ]; then
-              tar -czf "dist/omnivm-${TAG}-${name}.tar.gz" -C pkg "omnivm-${TAG}-${name}"
+          mkdir -p dist
+          for d in artifacts/cli-*/; do
+            target="$(basename "$d" | sed 's/^cli-//')"
+            # the artifact contains the loose bundle folder; zip it once here
+            if [ "$target" = "windows-x64" ]; then
+              tar -a -cf "dist/omnivm-${TAG}-${target}.zip" -C "$d" .
             else
-              tar -a -cf "dist/omnivm-${TAG}-${name}.zip" -C pkg "omnivm-${TAG}-${name}"
+              tar -czf "dist/omnivm-${TAG}-${target}.tar.gz" -C "$d" .
             fi
-          }
-          pack linux-x64 tar.gz
-          pack linux-arm64 tar.gz
-          pack macos-arm64 zip
-          pack windows-x64 zip
+          done
+
+      - name: Collect desktop installers
+        run: |
+          set -euo pipefail
+          find artifacts/desktop-* -type f -exec cp {} dist/ \;
           ls -la dist/
 
       - name: Generate checksums
@@ -64,44 +61,49 @@ jobs:
           sha256sum * > checksums.txt
           cat checksums.txt
 
-      - name: Create release and upload executables
+      - name: Create release and upload
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           cat > notes.md <<EOF
-          **OmniVM Workstation $TAG** — run virtual machines from your terminal.
+          **OmniVM Workstation $TAG** — run virtual machines from your desktop.
 
-          ## Install
+          ## Desktop app (recommended)
 
-          Download the archive for your platform, extract it, and run the
-          **omnivm** binary inside:
+          | Platform              | Installer                                  |
+          |-----------------------|--------------------------------------------|
+          | Windows x64           | OmniVM Setup $TAG.exe (or portable .zip)   |
+          | macOS (Apple Silicon) | OmniVM-$TAG-arm64.dmg                      |
+          | Linux                 | OmniVM-$TAG.AppImage or .deb               |
 
-          | Platform    | Archive                           |
-          |-------------|-----------------------------------|
-          | Linux x64   | omnivm-$TAG-linux-x64.tar.gz      |
-          | Linux arm64 | omnivm-$TAG-linux-arm64.tar.gz    |
-          | macOS (Apple Silicon) | omnivm-$TAG-macos-arm64.zip |
-          | Windows x64 | omnivm-$TAG-windows-x64.zip       |
+          Install and start **OmniVM** — a native window with the VM library,
+          power controls, live console and snapshot manager.
+
+          ## Terminal executables (CLI + TUI)
+
+          | Platform              | Archive                                    |
+          |-----------------------|--------------------------------------------|
+          | Linux x64             | omnivm-$TAG-linux-x64.tar.gz               |
+          | Linux arm64           | omnivm-$TAG-linux-arm64.tar.gz             |
+          | macOS (Apple Silicon) | omnivm-$TAG-macos-arm64.zip                |
+          | Windows x64           | omnivm-$TAG-windows-x64.zip                |
 
           \`\`\`
-          tar xzf omnivm-$TAG-linux-x64.tar.gz     # Linux
+          tar xzf omnivm-$TAG-linux-x64.tar.gz
           ./omnivm-$TAG-linux-x64/omnivm doctor
           ./omnivm-$TAG-linux-x64/omnivm create myvm
-          ./omnivm-$TAG-linux-x64/omnivm
           \`\`\`
 
           ## Notes
 
-          - The executables are self-contained (Node runtime, x86 emulator,
-            BIOS ROMs and the bundled OmniOS guest are all embedded) — nothing
-            else to install. Verify with \`omnivm doctor\`.
-          - **macOS:** the binaries are ad-hoc signed and not notarized. If
-            Gatekeeper complains: \`xattr -d com.apple.quarantine ./omnivm\`
-          - **Windows:** SmartScreen may warn about the unsigned binary —
-            choose "More info" → "Run anyway".
+          - Everything is self-contained (runtime, x86 emulator, BIOS ROMs and
+            the bundled OmniOS guest are embedded) — nothing else to install.
+          - **macOS:** apps are ad-hoc signed, not notarized. If Gatekeeper
+            complains: \`xattr -d com.apple.quarantine <app>\`
+          - **Windows:** SmartScreen may warn — choose "More info" → "Run anyway".
           - VMs are stored in \`~/.omnivm\` by default (\`OMNIVM_HOME\` to change).
 
-          Full docs in the README. SHA-256 checksums in checksums.txt.
+          SHA-256 checksums in checksums.txt.
           EOF
           gh release create "$TAG" dist/* \
             --title "OmniVM Workstation $TAG" \

@@ -1,18 +1,20 @@
-# Builds OmniVM single-file executables for Windows, macOS and Linux.
+# Builds OmniVM for every platform:
+#
+#   cli      — single-file terminal executables (Node SEA)
+#   desktop  — native desktop applications (Electron):
+#                Linux  → AppImage + .deb
+#                macOS  → .dmg (Apple Silicon)
+#                Windows→ NSIS installer + portable .zip
 #
 # Also callable as a reusable workflow (used by release.yml):
 #   jobs:
 #     build:
 #       uses: ./.github/workflows/build.yml
 #
-# Each platform job produces one archive artifact:
-#   omnivm-<version>-<os>-<arch>.(tar.gz|zip)
-# containing the standalone executable + README + LICENSE.
-#
 # Note: linux-arm64 uses GitHub's arm64 runners (available on public repos).
 # If your repo is private and the job never starts, remove that matrix entry.
 
-name: Build executables
+name: Build OmniVM
 
 on:
   push:
@@ -43,8 +45,8 @@ jobs:
       - name: End-to-end VM lifecycle test
         run: node test/smoke.js
 
-  build:
-    name: Build ${{ matrix.name }}
+  cli:
+    name: CLI executable — ${{ matrix.name }}
     # runs in parallel with the test job — a test failure does not block
     # producing executables (release.yml re-runs the full workflow on tags)
     timeout-minutes: 30
@@ -95,7 +97,57 @@ jobs:
       - name: Upload artifact (unpacked bundle — single zip)
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.name }}
+          name: cli-${{ matrix.name }}
           path: ${{ env.BUNDLE }}
+          if-no-files-found: error
+          retention-days: 14
+
+  desktop:
+    name: Desktop app — ${{ matrix.name }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux
+            runs-on: ubuntu-latest
+          - name: macos
+            runs-on: macos-14
+          - name: windows
+            runs-on: windows-latest
+    runs-on: ${{ matrix.runs-on }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Determine version
+        shell: bash
+        run: |
+          if [[ "${GITHUB_REF_NAME:-}" =~ ^v[0-9] ]]; then
+            echo "OMNIVM_VERSION=${GITHUB_REF_NAME}" >> "$GITHUB_ENV"
+          fi
+      - run: npm ci
+      - name: Desktop smoke test (window boots, IPC roundtrip)
+        if: matrix.name == 'linux'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq xvfb
+          xvfb-run -a node test/electron-smoke.js
+      - name: Package installers (electron-builder)
+        shell: bash
+        run: npx electron-builder --publish never
+      - name: Collect installer files
+        shell: bash
+        run: |
+          mkdir -p desktop-dist
+          find release -maxdepth 1 -type f \( -name "*.AppImage" -o -name "*.deb" -o -name "*.dmg" -o -name "*.exe" -o -name "*.zip" \) -exec cp {} desktop-dist/ \;
+          ls -la desktop-dist
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-${{ matrix.name }}
+          path: desktop-dist
           if-no-files-found: error
           retention-days: 14

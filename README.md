@@ -7,10 +7,12 @@
      |_||_\___/|_|  |_|___/___|
 ```
 
-**Run virtual machines from a real graphical interface.** OmniVM Workstation
-draws its entire GUI — library, toolbar, dialogs, live VM console — onto a
-canvas with its own widget engine: no HTML markup, no CSS, no DOM, no GUI
-toolkit downloads. Pure Node.js (plus a terminal UI and CLI, if you prefer).
+**A native desktop app for running virtual machines.** OmniVM Workstation is
+a real desktop application (Electron — the VS Code model): its own window,
+native menus and accelerators, no server, no browser. Every widget — library,
+toolbar, dialogs, the live VM console — is drawn by OmniVM's own canvas
+engine: no HTML UI, no DOM widgets, no GUI toolkit. Plus a terminal TUI and
+full CLI from the same engine.
 
 It ships with a complete virtualization stack:
 
@@ -19,7 +21,7 @@ It ships with a complete virtualization stack:
 | **Engine**   | [v86](https://github.com/copy/v86) — a full x86 PC emulator (WASM JIT): CPU, BIOS, VGA, PIC/PIT, UART, floppy/IDE/CD controllers |
 | **Manager**  | VM lifecycle processes ("runners") with a control socket — VMs keep running when you close the window, like VMware |
 | **OmniOS**   | A bundled guest operating system written in x86 assembly (boot sector + kernel with a working shell), built from source in this repo |
-| **UI**       | A hand-drawn canvas GUI (zero HTML/DOM/CSS) + terminal TUI + full CLI  |
+| **UI**       | Native desktop app (Electron, canvas-drawn — zero HTML UI) + terminal TUI + full CLI  |
 
 ```console
 $ npm install
@@ -49,20 +51,23 @@ $ ./bin/omnivm
 
 ## Quick start
 
-**Option A — the graphical Workstation:**
+**Option A — the desktop app (recommended):**
+
+Install a release for your platform (Windows installer, macOS `.dmg`,
+Linux `.AppImage`/`.deb`) or run it from a checkout:
 
 ```console
-$ ./bin/omnivm            # or: omnivm web
-  OmniVM Workstation — graphical interface
-  running at  http://localhost:8080
+$ npm install             # first time only (Electron + engine)
+$ ./bin/omnivm            # or: omnivm app
 ```
 
-Point your browser there: a dark VMware-style window with a VM library,
+A native window opens: a dark Workstation-style UI with the VM library,
 power toolbar (power on/off, suspend, resume, reset, pause), summary cards,
 a live serial console you can type into, a phosphor-green VGA screen view,
-snapshot manager and a new-VM wizard — every pixel drawn by OmniVM's own
-canvas engine (`lib/web/static/app.js`), talking to the same VM runners as
-the CLI. Ships inside the executables too.
+snapshot manager and a new-VM wizard. Native menus (File / VM / View / Help,
+Ctrl-N, Ctrl-P, Ctrl-S…), single-instance, and every pixel drawn by OmniVM's
+own canvas engine (`electron/renderer/app.js`). The app talks to the VM
+runners over IPC — no server, no browser.
 
 **Option B — standalone executable (no Node needed):** grab an archive from
 the [Releases](../../releases) page — `omnivm-<version>-<os>-<arch>` for
@@ -117,9 +122,11 @@ support: esbuild bundles the app to one CJS file, the BIOS ROMs / OmniOS
 floppy / v86 WASM engine are embedded as SEA assets (`sea-config.json`), and
 the blob is injected into a copy of the node binary with postject.
 
-CI artifacts are a single zip of the unpacked bundle (no nested archives);
-the release archives (`tar.gz`/`zip`) are assembled once in `release.yml`,
-which also restores the executable bit the artifact store strips.
+CI produces **desktop installers** (`desktop` job — electron-builder:
+AppImage/deb/dmg/NSIS/portable) and **single-file CLI executables** (`cli`
+job). Artifacts are single-zip only; release archives are assembled once in
+`release.yml`. The Linux desktop job also runs the Electron app headlessly
+under xvfb and verifies the window + IPC roundtrip before packaging.
 
 ## The Workstation UI
 
@@ -248,21 +255,24 @@ $ npm test        # end-to-end: boots a real VM, drives the console,
 ## Project layout
 
 ```
-bin/omnivm.js          entry point
+bin/omnivm.js          CLI entry point
+electron/main.js       desktop app: window, native menu, IPC
+electron/preload.cjs   context bridge (desktop API surface)
+electron/vm-api.js     desktop data layer (headless-testable)
+electron/renderer/     canvas GUI engine (drawn UI, no HTML widgets)
 lib/cli.js             command-line interface
 lib/store.js           VM registry & disk/image paths
 lib/assets.js          asset resolution (repo files or SEA-embedded)
 lib/manager.js         lifecycle, control-socket client, attach/console
 lib/runner.js          per-VM runner process (v86 host + control server)
 lib/protocol.js        NDJSON framing
-lib/tui/tui.js         terminal screen: cell buffer, diff rendering, keys
-lib/tui/app.js         the Workstation UI
+lib/tui/               terminal UI (omnivm tui)
 guests/omnios/         bundled guest OS (assembly source + Makefile + image)
 vendor/bios/           SeaBIOS + VGABIOS (vendored, see vendor/bios/README)
-scripts/build.mjs      single-file executable builder (Node SEA + postject)
-sea-config.json        SEA manifest: entry + embedded assets
-.github/workflows/     build.yml (all-platform executables) · release.yml
+scripts/build.mjs      single-file CLI executable builder (Node SEA)
+.github/workflows/     build.yml (CLI + desktop installers) · release.yml
 test/smoke.js          end-to-end lifecycle test
+test/electron-smoke.js desktop app boot + IPC verification (xvfb in CI)
 ```
 
 ## Credits

@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "OmniVM Workstation - run virtual machines from your terminal. No HTML, no Python. Pure Node.js + software x86 emulation.",
   "type": "module",
-  "main": "bin/omnivm.js",
+  "main": "electron/main.js",
   "bin": {
     "omnivm": "bin/omnivm.js"
   },
@@ -23,15 +23,58 @@
   ],
   "license": "MIT",
   "dependencies": {
-    "v86": "0.5.462",
-    "ws": "^8.22.0"
+    "v86": "0.5.462"
   },
   "engines": {
     "node": ">=18"
   },
   "devDependencies": {
+    "electron": "^33.4.11",
+    "electron-builder": "^25.1.8",
     "esbuild": "^0.28.2",
-    "js-yaml": "^5.4.2",
     "postject": "^1.0.0-alpha.6"
+  },
+  "build": {
+    "appId": "dev.omninode.omnivm",
+    "productName": "OmniVM",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "electron/**/*",
+      "lib/**/*",
+      "bin/**/*",
+      "vendor/**/*",
+      "guests/omnios/omnios.img",
+      "package.json",
+      "!test/**",
+      "!scripts/**",
+      "!release/**",
+      "!dist/**"
+    ],
+    "linux": {
+      "targets": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "System",
+      "executableName": "omnivm"
+    },
+    "mac": {
+      "targets": [
+        "dmg"
+      ],
+      "category": "public.app-category.developer-tools"
+    },
+    "win": {
+      "targets": [
+        "nsis",
+        "zip"
+      ]
+    },
+    "nsis": {
+      "oneClick": "false",
+      "allowToChangeInstallationDirectory": "true"
+    }
   }
 }
