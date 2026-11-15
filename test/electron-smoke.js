@@ -20,7 +20,7 @@ if (typeof electronPath !== "string") {
 }
 
 const root = path.resolve(import.meta.dirname, "..");
-const child = spawn(electronPath, [root, "--smoke", "--no-sandbox"], {
+const child = spawn(electronPath, [root, "--smoke", "--no-sandbox", "--disable-gpu", "--disable-dev-shm-usage"], {
   cwd: root,
   stdio: ["ignore", "pipe", "pipe"],
   env: { ...process.env, ELECTRON_ENABLE_LOGGING: "0" },

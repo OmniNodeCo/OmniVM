@@ -76,5 +76,6 @@
       "oneClick": "false",
       "allowToChangeInstallationDirectory": "true"
     }
-  }
+  },
+  "author": "OmniVM contributors <omnivm@omninode.dev>"
 }

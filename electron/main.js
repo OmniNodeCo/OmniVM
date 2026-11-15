@@ -155,11 +155,12 @@ app.whenReady().then(() => {
   buildMenu();
   const win = createWindow();
 
-  win.webContents.once("did-finish-load", () => {
-    if (SMOKE) {
-      /* headless smoke: renderer pings back, we verify a full IPC roundtrip */
-      const timeout = setTimeout(() => { console.error("ELECTRON_SMOKE_TIMEOUT"); app.exit(1); }, 30000);
-      ipcMain.once("smoke-ping", async event => {
+      win.webContents.once("did-finish-load", () => {
+        if (SMOKE) {
+          /* headless smoke: renderer signals readiness via preload's ready()
+           * ("renderer-ready"), then we verify a full IPC roundtrip */
+          const timeout = setTimeout(() => { console.error("ELECTRON_SMOKE_TIMEOUT"); app.exit(1); }, 30000);
+          ipcMain.once("renderer-ready", async event => {
         try {
           const r = await event.sender.executeJavaScript("window.__omnivmReady === true");
           const vms = api.list();
