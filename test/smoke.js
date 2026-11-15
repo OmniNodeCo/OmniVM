@@ -201,6 +201,7 @@ try {
       if (mgr.isRunning(vm3)) throw new Error("precondition: VM should be off");
       const r1 = api.setCdrom(vm3.id, iso);
       if (path.resolve(r1.cdrom) !== path.resolve(iso)) throw new Error("cdrom not set");
+      if (r1.boot !== "cdrom") throw new Error(`boot order not switched to cdrom (got ${r1.boot}) — the ISO would never boot`);
       if (findVM(vm3.id).cdrom !== path.resolve(iso)) throw new Error("vm.json not updated");
       let rejected2 = false;
       try { api.setCdrom(vm3.id, iso + ".missing"); } catch { rejected2 = true; }
@@ -213,6 +214,7 @@ try {
       await mgr.powerOffVM(vm3);
       api.ejectCdrom(vm3.id);
       if (findVM(vm3.id).cdrom !== null) throw new Error("eject failed");
+      if (findVM(vm3.id).boot === "cdrom") throw new Error("boot still cdrom after eject");
     } finally {
       fs.rmSync(iso, { force: true });
     }

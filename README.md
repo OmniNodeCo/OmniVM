@@ -70,9 +70,16 @@ own canvas engine (`electron/renderer/app.js`). The app talks to the VM
 runners over IPC — no server, no browser.
 
 **Disc images by drag & drop:** drag any `.iso` onto the window — it attaches
-to the selected VM (power it off first, like VMware), or pre-fills the New VM
-wizard if nothing is selected. Ctrl-V pastes too: an ISO path attaches it,
-and inside the interactive console it types straight into the guest.
+to the selected VM as the boot CD (power it off first, like VMware), or
+pre-fills the New VM wizard if nothing is selected. Ctrl-V pastes too: an ISO
+path attaches it, and inside the interactive console it types straight into
+the guest.
+
+> **Which ISOs actually boot:** the engine is software x86 emulation, so
+> lightweight images work — FreeDOS, Tiny Core, KolibriOS, small Linux
+> rescue ISOs. Modern Windows / desktop-Linux ISOs will **not** boot (they
+> need real hardware features v86 doesn't implement). If a heavy ISO hangs
+> at the BIOS screen, that's why — it's a platform limit, not a bug.
 
 **Option B — standalone executable (no Node needed):** grab an archive from
 the [Releases](../../releases) page — `omnivm-<version>-<os>-<arch>` for

@@ -196,7 +196,8 @@ async function attachIso(rawPath) {
     }
     try {
       await rpc("vm:set-cdrom", { id: vm.id, iso: p });
-      toast(`Attached ${shortPath(p)} to "${vm.name}"`, "ok");
+      toast(`ISO attached — "${vm.name}" boots from it on next power-on`, "ok");
+      toast("Note: software emulation boots lightweight ISOs only (FreeDOS, Tiny Linux…)", "warn");
     } catch (e) { toast(e.message, "err"); }
   } else {
     form.values.cdrom = p;
@@ -209,10 +210,13 @@ async function attachIso(rawPath) {
 async function droppedFiles(fileList) {
   const files = Array.from(fileList || []);
   if (!files.length) return;
-  const iso = files.find(f => looksLikeIso(f.path || "") || looksLikeIso(f.name)) || files[0];
+  const iso = files.find(f => looksLikeIso(f.name)) || files[0];
   let p = "";
-  try { p = bridge.pathForFile(iso) || ""; } catch { p = ""; }
-  if (!p) p = iso.name;
+  try { p = bridge.pathForFile(iso) || ""; } catch (e) { p = ""; }
+  if (!p) {
+    toast(`Could not resolve the dropped file's path (${iso.name})`, "err");
+    return;
+  }
   await attachIso(p);
 }
 
@@ -519,7 +523,7 @@ function drawSummary(vm) {
     ["Processors", `${vm.cpus} vCPU (software x86)`],
     ["Hard Disk", vm.diskMB > 0 ? `${fmtMB(vm.diskMB)} raw image` : "none"],
     ["Floppy", vm.floppy === "omnios" ? "OmniOS 1.0 (bundled)" : vm.floppy ? shortPath(vm.floppy) : "empty"],
-    ["CD-ROM", vm.cdrom ? shortPath(vm.cdrom) : "empty"],
+    ["CD-ROM", vm.cdrom ? `${shortPath(vm.cdrom)} (boots)` : "empty"],
     ["Boot order", vm.boot || "floppy"],
     ["Uptime", on && up != null ? fmtUptime(up) : "-"],
   ];

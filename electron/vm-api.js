@@ -100,7 +100,10 @@ export function setCdrom(id, isoPath) {
   if (!/\.iso$/i.test(clean)) throw new Error(`only .iso disc images can be attached`);
   const cur = store.loadVM(id);
   cur.cdrom = path.resolve(clean);
-  if (!cur.boot || cur.boot === "floppy" && !cur.floppy) cur.boot = "cdrom";
+  // dragging an ISO in means the user wants to boot it — always switch the
+  // boot order to CD (previously we only did this when no floppy existed,
+  // so VMs with the bundled OmniOS floppy kept booting OmniOS instead)
+  cur.boot = "cdrom";
   store.saveVM(cur);
   broadcastVmsSoon();
   return { cdrom: cur.cdrom, boot: cur.boot };
