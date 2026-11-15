@@ -13,7 +13,6 @@ import * as api from "./vm-api.js";
 const isMac = process.platform === "darwin";
 const SMOKE = process.argv.includes("--smoke");
 const windows = new Set();
-let smokePassed = false;
 
 app.setName("OmniVM");
 
@@ -52,6 +51,37 @@ function createWindow() {
     else if (evt === "console") win.webContents.send("console", payload.vmId, payload.data);
   };
   win.sink = sink;
+
+  /* Smoke mode: register the readiness listener BEFORE loadFile — the
+   * renderer sends "renderer-ready" during script execution, which happens
+   * before did-finish-load, so a late registration would always miss it. */
+  if (SMOKE) {
+    console.error("ELECTRON_APP_READY");
+    win.webContents.on("did-fail-load", (_e, code, desc, url2) =>
+      console.error(`ELECTRON_LOAD_FAIL ${code} ${desc} ${url2}`));
+    win.webContents.on("did-finish-load", () => console.error("ELECTRON_WINDOW_LOADED"));
+    win.webContents.on("render-process-gone", (_e, details) =>
+      console.error(`ELECTRON_RENDERER_GONE ${details.reason}`));
+
+    const timeout = setTimeout(() => { console.error("ELECTRON_SMOKE_TIMEOUT"); app.exit(1); }, 45000);
+    ipcMain.once("renderer-ready", async event => {
+      try {
+        const ready = await event.sender.executeJavaScript("window.__omnivmReady === true");
+        const vms = api.list();
+        clearTimeout(timeout);
+        if (ready && Array.isArray(vms)) {
+          console.log(`ELECTRON_SMOKE_OK vms=${vms.length}`);
+          app.exit(0);
+        } else {
+          console.error(`ELECTRON_SMOKE_FAIL ready=${ready} vmsOk=${Array.isArray(vms)}`);
+          app.exit(1);
+        }
+      } catch (e) {
+        console.error("ELECTRON_SMOKE_FAIL", e.message);
+        app.exit(1);
+      }
+    });
+  }
 
   win.loadFile(path.join(url.fileURLToPath(new URL(".", import.meta.url)), "renderer", "index.html"));
   return win;
@@ -154,23 +184,6 @@ app.whenReady().then(() => {
   registerIpc();
   buildMenu();
   const win = createWindow();
-
-      win.webContents.once("did-finish-load", () => {
-        if (SMOKE) {
-          /* headless smoke: renderer signals readiness via preload's ready()
-           * ("renderer-ready"), then we verify a full IPC roundtrip */
-          const timeout = setTimeout(() => { console.error("ELECTRON_SMOKE_TIMEOUT"); app.exit(1); }, 30000);
-          ipcMain.once("renderer-ready", async event => {
-        try {
-          const r = await event.sender.executeJavaScript("window.__omnivmReady === true");
-          const vms = api.list();
-          clearTimeout(timeout);
-          if (r && Array.isArray(vms)) { console.log("ELECTRON_SMOKE_OK vms=" + vms.length); smokePassed = true; app.exit(0); }
-          else { console.error("ELECTRON_SMOKE_FAIL"); app.exit(1); }
-        } catch (e) { console.error("ELECTRON_SMOKE_FAIL", e.message); app.exit(1); }
-      });
-    }
-  });
 
   app.on("activate", () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 });

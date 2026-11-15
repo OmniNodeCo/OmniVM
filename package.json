@@ -1,7 +1,7 @@
 {
   "name": "omnivm",
   "version": "1.0.0",
-  "description": "OmniVM Workstation - run virtual machines from your terminal. No HTML, no Python. Pure Node.js + software x86 emulation.",
+  "description": "Run virtual machines on your desktop — bundled OmniOS guest, live console, snapshots. No hypervisor required.",
   "type": "module",
   "main": "electron/main.js",
   "bin": {

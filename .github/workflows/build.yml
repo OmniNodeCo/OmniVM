@@ -131,13 +131,43 @@ jobs:
       - run: npm ci
       - name: Desktop smoke test (window boots, IPC roundtrip)
         if: matrix.name == 'linux'
+        shell: bash
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq xvfb libnss3 libasound2 libgbm1 libgtk-3-0 libxss1 libxkbcommon0 || true
-          xvfb-run -a --server-args='-screen 0 1280x800x24' node test/electron-smoke.js
+          xvfb-run -a --server-args='-screen 0 1280x800x24' node test/electron-smoke.js 2>&1 | tee smoke.log
+          exit ${PIPESTATUS[0]}
       - name: Package installers (electron-builder)
         shell: bash
-        run: npx electron-builder --publish never
+        run: |
+          set -o pipefail
+          npx electron-builder --publish never 2>&1 | tee electron-builder.log
+      - name: Failure diagnostics → annotations & summary
+        if: failure()
+        shell: bash
+        run: |
+          {
+            echo "### electron-builder.log (tail)"
+            echo '```'
+            tail -n 60 electron-builder.log 2>/dev/null || echo "(no log — step failed before packaging)"
+            echo '```'
+            echo "### smoke.log (tail)"
+            echo '```'
+            tail -n 40 smoke.log 2>/dev/null || echo "(no log — step failed before smoke test)"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          { tail -n 30 electron-builder.log 2>/dev/null; tail -n 25 smoke.log 2>/dev/null; } \
+            | head -c 3000 | while IFS= read -r line; do echo "::error::$line"; done
+      - name: Upload diagnostics artifact
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: diag-${{ matrix.name }}
+          path: |
+            electron-builder.log
+            smoke.log
+          if-no-files-found: ignore
+          retention-days: 7
       - name: Collect installer files
         shell: bash
         run: |
