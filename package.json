@@ -53,21 +53,21 @@
       "!dist/**"
     ],
     "linux": {
-      "targets": [
+      "category": "System",
+      "executableName": "omnivm",
+      "target": [
         "AppImage",
         "deb"
-      ],
-      "category": "System",
-      "executableName": "omnivm"
+      ]
     },
     "mac": {
-      "targets": [
+      "category": "public.app-category.developer-tools",
+      "target": [
         "dmg"
-      ],
-      "category": "public.app-category.developer-tools"
+      ]
     },
     "win": {
-      "targets": [
+      "target": [
         "nsis",
         "zip"
       ]
