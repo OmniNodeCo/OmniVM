@@ -172,6 +172,33 @@ try {
     }
   });
 
+  // 12c. ISO attach/eject via the desktop data layer (drag & drop backend)
+  await check("attach & eject ISO (desktop data layer)", async () => {
+    const api = await import("../electron/vm-api.js");
+    const iso = path.join(os.tmpdir(), `omnivm-test-${process.pid}.iso`);
+    fs.writeFileSync(iso, "fake iso contents");
+    try {
+      const vm3 = mgr.refresh(vm);
+      if (mgr.isRunning(vm3)) throw new Error("precondition: VM should be off");
+      const r1 = api.setCdrom(vm3.id, iso);
+      if (path.resolve(r1.cdrom) !== path.resolve(iso)) throw new Error("cdrom not set");
+      if (findVM(vm3.id).cdrom !== path.resolve(iso)) throw new Error("vm.json not updated");
+      let rejected2 = false;
+      try { api.setCdrom(vm3.id, iso + ".missing"); } catch { rejected2 = true; }
+      if (!rejected2) throw new Error("missing file accepted");
+      await mgr.startVM(vm3);
+      await sleep(1500);
+      let rejected = false;
+      try { api.setCdrom(vm3.id, iso); } catch { rejected = true; }
+      if (!rejected) throw new Error("hot media change was not rejected");
+      await mgr.powerOffVM(vm3);
+      api.ejectCdrom(vm3.id);
+      if (findVM(vm3.id).cdrom !== null) throw new Error("eject failed");
+    } finally {
+      fs.rmSync(iso, { force: true });
+    }
+  });
+
   // 13. cleanup
   deleteVM(vm.id);
   if (findVM("smoke-vm")) throw new Error("VM still exists after delete");

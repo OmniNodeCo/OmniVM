@@ -5,7 +5,7 @@
  * spawned as node child processes); the window talks over IPC. There is no
  * server, no browser and no network component.
  */
-import { app, BrowserWindow, Menu, ipcMain, dialog } from "electron";
+import { app, BrowserWindow, Menu, ipcMain, dialog, clipboard } from "electron";
 import path from "node:path";
 import url from "node:url";
 import * as api from "./vm-api.js";
@@ -168,6 +168,9 @@ function registerIpc() {
   handle("vm:delete", p => api.deleteVM(p.id));
   handle("vm:clone", p => api.cloneVM(p.id));
   handle("vm:action", p => api.vmAction(p.id, p.action));
+  handle("vm:set-cdrom", p => api.setCdrom(p.id, p.iso));
+  handle("vm:eject-cdrom", p => api.ejectCdrom(p.id));
+  handle("sys:clipboard-read", () => clipboard.readText());
   handle("snap:list", p => api.snapshots(p.id));
   handle("snap:take", p => api.snapshotTake(p.id, p.name));
   handle("snap:revert", p => api.snapshotRevert(p.id, p.name));

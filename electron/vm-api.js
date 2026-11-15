@@ -3,6 +3,8 @@
  * Plain Node (no electron imports) so it can be smoke-tested headlessly.
  * The Electron main process wires this to IPC; every connected window gets
  * state broadcasts and a private console tap. */
+import fs from "node:fs";
+import path from "node:path";
 import * as store from "../lib/store.js";
 import * as mgr from "../lib/manager.js";
 
@@ -68,6 +70,38 @@ export function cloneVM(id) {
   const c = store.cloneVM(vm);
   broadcastVmsSoon();
   return { id: c.id, name: c.name };
+}
+
+/* Attach a CD-ROM image (.iso) to a VM — requires the VM to be powered off */
+export function setCdrom(id, isoPath) {
+  const vm = store.findVM(id);
+  if (!vm) throw new Error(`no such VM`);
+  if (mgr.isRunning(mgr.refresh(vm))) throw new Error(`power "${vm.name}" off before changing its media`);
+  const clean = String(isoPath || "").trim().replace(/^["']|["']$/g, "");
+  if (!clean) throw new Error("no ISO path given");
+  let st;
+  try { st = fs.statSync(clean); } catch { throw new Error(`file not found: ${clean}`); }
+  if (!st.isFile()) throw new Error(`not a file: ${clean}`);
+  if (!/\.iso$/i.test(clean)) throw new Error(`only .iso disc images can be attached`);
+  const cur = store.loadVM(id);
+  cur.cdrom = path.resolve(clean);
+  if (!cur.boot || cur.boot === "floppy" && !cur.floppy) cur.boot = "cdrom";
+  store.saveVM(cur);
+  broadcastVmsSoon();
+  return { cdrom: cur.cdrom, boot: cur.boot };
+}
+
+/* remove the CD-ROM from a VM */
+export function ejectCdrom(id) {
+  const vm = store.findVM(id);
+  if (!vm) throw new Error(`no such VM`);
+  if (mgr.isRunning(mgr.refresh(vm))) throw new Error(`power "${vm.name}" off before changing its media`);
+  const cur = store.loadVM(id);
+  cur.cdrom = null;
+  if (cur.boot === "cdrom") cur.boot = cur.floppy ? "floppy" : "disk";
+  store.saveVM(cur);
+  broadcastVmsSoon();
+  return true;
 }
 
 const ACTIONS = {

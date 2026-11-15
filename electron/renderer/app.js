@@ -87,6 +87,7 @@ let snaps = [], snapSel = -1, snapName = "", snapFieldFocus = false;
 let confirmFn = null, confirmState = { title: "", body: "" };
 let lastFrame = Date.now();
 let uptimeBase = null, uptimeAt = 0;   // interpolate uptime between broadcasts
+let dragDepth = 0;                     // ISO drag & drop overlay
 
 const form = {
   fields: ["name", "mem", "disk", "media", "cdrom"],
@@ -177,6 +178,82 @@ async function openSnaps() {
   if (!vm) return;
   modal = "snaps"; snapSel = -1; snaps = []; snapName = ""; snapFieldFocus = false;
   try { snaps = await rpc("snap:list", { id: vm.id }, 30000); } catch {}
+}
+
+/* ---------------- ISO drag & drop / paste ---------------- */
+function looksLikeIso(p) { return /\.iso$/i.test(String(p || "").trim()); }
+
+async function attachIso(rawPath) {
+  const p = String(rawPath || "").trim().replace(/^["']|["']$/g, "");
+  if (!p) return;
+  if (!looksLikeIso(p)) { toast("Only .iso disc images can be attached", "warn"); return; }
+  const vm = selectedVM();
+  if (vm) {
+    if (vm.state !== "off" && vm.state !== "crashed") {
+      toast(`Power "${vm.name}" off to change its media`, "warn");
+      return;
+    }
+    try {
+      await rpc("vm:set-cdrom", { id: vm.id, iso: p });
+      toast(`Attached ${shortPath(p)} to "${vm.name}"`, "ok");
+    } catch (e) { toast(e.message, "err"); }
+  } else {
+    form.values.cdrom = p;
+    form.focus = form.fields.indexOf("cdrom");
+    modal = "newvm";
+    toast("ISO ready — name the VM and create it", "ok");
+  }
+}
+
+async function droppedFiles(fileList) {
+  const files = Array.from(fileList || []);
+  if (!files.length) return;
+  const iso = files.find(f => looksLikeIso(f.path || "") || looksLikeIso(f.name)) || files[0];
+  let p = "";
+  try { p = bridge.pathForFile(iso) || ""; } catch { p = ""; }
+  if (!p) p = iso.name;
+  await attachIso(p);
+}
+
+window.addEventListener("dragenter", e => { e.preventDefault(); dragDepth++; });
+window.addEventListener("dragover", e => { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; });
+window.addEventListener("dragleave", e => { e.preventDefault(); dragDepth = Math.max(0, dragDepth - 1); });
+window.addEventListener("drop", e => {
+  e.preventDefault();
+  dragDepth = 0;
+  droppedFiles(e.dataTransfer && e.dataTransfer.files);
+});
+
+async function readClipboard() {
+  try { return (await rpc("sys:clipboard-read", {}, 5000)) || ""; }
+  catch { return ""; }
+}
+
+/* paste behaviour:
+ *  - newvm/snaps modal focused field: insert clipboard text
+ *  - interactive console: send clipboard text to the guest
+ *  - otherwise: attach an ISO whose path was copied to the clipboard */
+async function pasteSomewhere() {
+  const clip = await readClipboard();
+  const text = clip.replace(/\r|\n/g, " ").trim();
+  if (!text) { toast("Clipboard is empty", "warn"); return; }
+  if (modal === "newvm") {
+    const f = form.fields[form.focus];
+    if (f && f !== "media") { form.values[f] += text; return; }
+    return;
+  }
+  if (modal === "snaps") {
+    if (snapFieldFocus) snapName += text;
+    return;
+  }
+  const vm = selectedVM();
+  if (interactive && vm && (vm.state === "running" || vm.state === "paused")) {
+    bridge.invoke("console:input", { id: vm.id, data: btoa(unescape(encodeURIComponent(clip.replace(/\n/g, "\r")))) });
+    toast("Pasted into the guest console", "ok");
+    return;
+  }
+  if (looksLikeIso(text)) { await attachIso(text); return; }
+  if (/^[A-Za-z]:\\|^\//.test(text)) toast("Clipboard path is not an .iso", "warn");
 }
 
 /* ---------------- icons ---------------- */
@@ -299,7 +376,30 @@ function draw() {
   if (modal === "newvm") drawNewVM();
   if (modal === "snaps") drawSnaps();
   if (modal === "confirm") drawConfirm();
+  if (dragDepth > 0) drawDropOverlay();
   drawToasts();
+}
+
+function drawDropOverlay() {
+  ctx.fillStyle = "#0c14206e"; ctx.fillRect(0, 0, L.w, L.h);
+  const pad = 18, x = pad, y = L.head + pad, w = L.w - pad * 2, h = L.h - L.head - pad * 2;
+  rr(x, y, w, h, 16);
+  ctx.strokeStyle = C.accent; ctx.lineWidth = 2.5;
+  ctx.setLineDash([12, 10]);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  const vm = selectedVM();
+  const big = vm ? `Drop the ISO to attach it to "${vm.name}"`
+                 : "Drop the ISO to create a new VM with it";
+  text(big, L.w / 2 - tw(big, 19, 700) / 2, L.h / 2 - 22, 19, "#ffffff", { weight: 700 });
+  const small = vm ? "requires the VM to be powered off · Ctrl-V also pastes an ISO path"
+                   : "or press Ctrl-V with an ISO path copied";
+  text(small, L.w / 2 - tw(small, 12.5) / 2, L.h / 2 + 10, 12.5, "#c9e7f8");
+  /* disc icon */
+  const cx = L.w / 2, cy = L.h / 2 - 78;
+  ctx.strokeStyle = C.accent; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.arc(cx, cy, 26, 0, 7); ctx.stroke();
+  ctx.beginPath(); ctx.arc(cx, cy, 9, 0, 7); ctx.stroke();
 }
 
 function drawHeader() {
@@ -728,6 +828,12 @@ canvas.addEventListener("wheel", e => {
 }, { passive: false });
 
 window.addEventListener("keydown", e => {
+  if (e.ctrlKey && e.key.toLowerCase() === "v" && !e.altKey && !e.metaKey) {
+    // let the browser paste work nowhere — we own every paste target
+    e.preventDefault();
+    pasteSomewhere();
+    return;
+  }
   if (modal === "newvm") {
     const f = form.fields[form.focus];
     if (e.key === "Escape") { modal = null; return; }

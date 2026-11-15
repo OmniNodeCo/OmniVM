@@ -69,6 +69,11 @@ Ctrl-N, Ctrl-P, Ctrl-S…), single-instance, and every pixel drawn by OmniVM's
 own canvas engine (`electron/renderer/app.js`). The app talks to the VM
 runners over IPC — no server, no browser.
 
+**Disc images by drag & drop:** drag any `.iso` onto the window — it attaches
+to the selected VM (power it off first, like VMware), or pre-fills the New VM
+wizard if nothing is selected. Ctrl-V pastes too: an ISO path attaches it,
+and inside the interactive console it types straight into the guest.
+
 **Option B — standalone executable (no Node needed):** grab an archive from
 the [Releases](../../releases) page — `omnivm-<version>-<os>-<arch>` for
 Linux (tar.gz), macOS and Windows (zip) — extract and run the `omnivm`
