@@ -102,6 +102,7 @@ bridge.onVms(list => {
   const prev = vms.find(v => v.id === selectedId);
   if (prev && prev.uptimeMs != null) { uptimeBase = prev.uptimeMs; uptimeAt = Date.now(); }
   vms = list || [];
+  window.__vmsReceived = true;
 });
 bridge.onConsole((vmId, data) => {
   const buf = (consoles.get(vmId) || "") + b64text(data);
@@ -889,4 +890,7 @@ canvas.style.display = "block";
 })();
 window.__omnivmReady = true;
 bridge.ready();
+/* belt & braces: actively fetch the library at boot, in addition to the
+ * main-process pushes (registerSink + periodic broadcasts) */
+rpc("vms:list", {}, 15000).then(l => { if (Array.isArray(l)) vms = l; }).catch(() => {});
 (function frame() { draw(); requestAnimationFrame(frame); })();

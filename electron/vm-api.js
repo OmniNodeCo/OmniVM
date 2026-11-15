@@ -11,8 +11,22 @@ import * as mgr from "../lib/manager.js";
 /* one runner attachment per VM that at least one window watches */
 const taps = new Map(); // vmId -> {client, ring, subs:Set<sink>, statusTimer, uptimeMs}
 
+/* sinks of every open window — they receive VM-list broadcasts */
+const windowSinks = new Set();
+
 let stateTimer = null;
 let lastVmsJson = "";
+
+/* register a window's sink: pushes the current list immediately, then keeps
+ * it updated whenever VM state changes */
+export function registerSink(sink) {
+  windowSinks.add(sink);
+  sink("vms", list());
+}
+
+export function unregisterSink(sink) {
+  windowSinks.delete(sink);
+}
 
 export function start() {
   store.ensureDirs();
@@ -43,8 +57,9 @@ function broadcastVms(sink = null) {
   const json = JSON.stringify(vms);
   const changed = json !== lastVmsJson;
   lastVmsJson = json;
-  if (sink) sink("vms", vms);
-  else if (changed) for (const t of taps.values()) for (const s of t.subs) s("vms", vms);
+  if (sink) { sink("vms", vms); return; }
+  if (!changed) return;
+  for (const s of windowSinks) s("vms", vms);
 }
 
 /* ---------------- lifecycle actions ---------------- */

@@ -13,6 +13,7 @@ import * as api from "./vm-api.js";
 const isMac = process.platform === "darwin";
 const SMOKE = process.argv.includes("--smoke");
 const windows = new Set();
+const sinks = new Map(); // webContents id -> event sink (vms/console pushes)
 
 app.setName("OmniVM");
 
@@ -40,17 +41,23 @@ function createWindow() {
   });
   windows.add(win);
 
-  win.once("ready-to-show", () => win.show());
-  win.on("closed", () => windows.delete(win));
-  win.on("page-title-updated", e => e.preventDefault());
-
-  /* subscriber sink: pushes state + console events to THIS window */
+  const wcId = win.webContents.id;
   const sink = (evt, payload) => {
     if (win.isDestroyed()) return;
     if (evt === "vms") win.webContents.send("vms", payload);
     else if (evt === "console") win.webContents.send("console", payload.vmId, payload.data);
   };
-  win.sink = sink;
+  sinks.set(wcId, sink);
+  api.registerSink(sink); // pushes the initial VM library to this window
+
+  win.once("ready-to-show", () => win.show());
+  win.on("closed", () => {
+    windows.delete(win);
+    const s = sinks.get(wcId);
+    if (s) { api.detachAllFor(s); api.unregisterSink(s); }
+    sinks.delete(wcId);
+  });
+  win.on("page-title-updated", e => e.preventDefault());
 
   /* Smoke mode: register the readiness listener BEFORE loadFile — the
    * renderer sends "renderer-ready" during script execution, which happens
@@ -163,7 +170,12 @@ function registerIpc() {
     catch (e) { return { ok: false, error: e.message }; }
   });
 
-  handle("vms:list", () => api.list());
+  handle("vms:list", (p, event) => {
+    const list = api.list();
+    const s = sinks.get(event.sender.id);
+    if (s) s("vms", list); // also push, so the renderer can rely on events alone
+    return list;
+  });
   handle("vm:create", p => api.createVM(p));
   handle("vm:delete", p => api.deleteVM(p.id));
   handle("vm:clone", p => api.cloneVM(p.id));
@@ -175,8 +187,12 @@ function registerIpc() {
   handle("snap:take", p => api.snapshotTake(p.id, p.name));
   handle("snap:revert", p => api.snapshotRevert(p.id, p.name));
   handle("snap:delete", p => api.snapshotDelete(p.id, p.name));
-  handle("console:attach", (p, event) => api.attach(p.id, event.sender.sink));
-  handle("console:detach", (p, event) => api.detach(p.id, event.sender.sink));
+  handle("console:attach", (p, event) => {
+    const s = sinks.get(event.sender.id);
+    if (!s) throw new Error("window not ready");
+    return api.attach(p.id, s);
+  });
+  handle("console:detach", (p, event) => api.detach(p.id, sinks.get(event.sender.id)));
   handle("console:input", p => api.serialIn(p.id, p.data));
   handle("console:screen", p => api.screen(p.id));
 }

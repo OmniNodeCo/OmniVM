@@ -143,7 +143,26 @@ try {
     if (!list.find(s => s.name === "clean")) throw new Error("snapshot lost");
   });
 
-  // 12b. desktop app data layer (electron/vm-api): attach, console tap, input
+  // 12b. desktop app data layer (electron/vm-api): window sink push
+  // (regression: the VM library never loaded because windows were never
+  //  pushed the list — this check pins the fix)
+  await check("desktop app data layer (VM library push to windows)", async () => {
+    const api = await import("../electron/vm-api.js");
+    api.start();
+    const seen = [];
+    const sink = (evt, payload) => { if (evt === "vms") seen.push(payload); };
+    api.registerSink(sink);
+    try {
+      await sleep(100);
+      if (!seen.length) throw new Error("no initial vms push on registerSink");
+      if (!Array.isArray(seen[0])) throw new Error("push payload is not a list");
+      if (!seen[0].some(v => v.id === vm.id)) throw new Error("created VM missing from pushed list");
+      api.unregisterSink(sink);
+    } finally {
+      api.stop();
+    }
+  });
+
   await check("desktop app data layer (attach, console, input)", async () => {
     const api = await import("../electron/vm-api.js");
     api.start();
